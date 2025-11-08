@@ -8,7 +8,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/recharts@2.5.0/umd/Recharts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
         body { font-family: 'Noto Sans JP', sans-serif; }
@@ -21,29 +21,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
-
-        if (typeof window.Recharts === 'undefined') {
-            const rootEl = document.getElementById('root');
-            if (rootEl) {
-                rootEl.innerHTML = `
-                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#1f2937;text-align:center;padding:24px;">
-                        <h2 style="font-size:20px;font-weight:bold;margin-bottom:12px;">Rechartsの読み込みに失敗しました</h2>
-                        <p style="max-width:480px;line-height:1.6;">
-                            ネットワーク接続を確認のうえ再読み込みしてください。社内ネットワークでCDNが制限されている場合は
-                            <a href="https://unpkg.com/recharts@2.5.0/umd/Recharts.min.js" target="_blank" rel="noreferrer">Recharts</a>
-                            を許可する必要があります。
-                        </p>
-                    </div>
-                `;
-            }
-            throw new Error('Recharts failed to load');
-        }
-
-        const { 
-            BarChart, Bar, ScatterChart, Scatter, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-            XAxis, YAxis, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
-        } = window.Recharts;
+        const { useState, useEffect, useRef } = React;
 
         const DEFAULT_SHEET_ID = '1pJ3obcCDNGCLwZG7vjlt5H8h_4AeS_fvk24qiCLfBps';
         const GOOGLE_SLIDES_EMBED_URL = 'https://docs.google.com/presentation/d/1dLYP6QHsOEpkyO7uv_wofMpjfnSpmVLA/embed?start=false&loop=false&delayms=3000';
@@ -790,6 +768,13 @@
         }
 
         function DiagnosisResults({ analysis, data }) {
+            const radarChartRef = useRef(null);
+            const scatterChartRef = useRef(null);
+            const barChartRef = useRef(null);
+            const radarChart = useRef(null);
+            const scatterChart = useRef(null);
+            const barChart = useRef(null);
+
             if (!analysis) return null;
 
             const { quadrants, totalEmployees, averages, departments, scatterData, riskCounts, challengeCounts } = analysis;
@@ -803,11 +788,6 @@
 
             const riskStatus = determineRiskStatus(averages, riskCounts);
             const aiLevel = determineAiLevel(averages, typePercentages, riskStatus);
-            const radarData = [
-                { axis: '意欲 (X)', 自社: averages.motivation, 業界平均: INDUSTRY_BENCHMARK.motivation },
-                { axis: 'スキル (Y)', 自社: averages.skill, 業界平均: INDUSTRY_BENCHMARK.skill },
-                { axis: 'リスク (Z)', 自社: averages.risk, 業界平均: INDUSTRY_BENCHMARK.risk }
-            ];
             const topChallenges = getTopChallenges(challengeCounts);
 
             const deptColorMap = {};
@@ -826,6 +806,173 @@
 
             const riskiestDept = [...departments].sort((a, b) => b.highRiskRate - a.highRiskRate)[0];
             const strongestDept = [...departments].sort((a, b) => b.avgSkill - a.avgSkill)[0];
+
+            // Radar Chart
+            useEffect(() => {
+                if (radarChartRef.current) {
+                    const ctx = radarChartRef.current.getContext('2d');
+
+                    if (radarChart.current) {
+                        radarChart.current.destroy();
+                    }
+
+                    radarChart.current = new Chart(ctx, {
+                        type: 'radar',
+                        data: {
+                            labels: ['意欲 (X)', 'スキル (Y)', 'リスク (Z)'],
+                            datasets: [
+                                {
+                                    label: '御社',
+                                    data: [averages.motivation, averages.skill, averages.risk],
+                                    backgroundColor: 'rgba(92, 184, 92, 0.2)',
+                                    borderColor: '#5cb85c',
+                                    pointBackgroundColor: '#5cb85c',
+                                    pointBorderColor: '#fff',
+                                    pointHoverBackgroundColor: '#fff',
+                                    pointHoverBorderColor: '#5cb85c'
+                                },
+                                {
+                                    label: '業界平均',
+                                    data: [INDUSTRY_BENCHMARK.motivation, INDUSTRY_BENCHMARK.skill, INDUSTRY_BENCHMARK.risk],
+                                    backgroundColor: 'rgba(148, 163, 184, 0.2)',
+                                    borderColor: '#94a3b8',
+                                    pointBackgroundColor: '#94a3b8',
+                                    pointBorderColor: '#fff',
+                                    pointHoverBackgroundColor: '#fff',
+                                    pointHoverBorderColor: '#94a3b8'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    max: 5,
+                                    ticks: { stepSize: 1 }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: true, position: 'bottom' }
+                            }
+                        }
+                    });
+                }
+
+                return () => {
+                    if (radarChart.current) {
+                        radarChart.current.destroy();
+                    }
+                };
+            }, [analysis]);
+
+            // Scatter Chart
+            useEffect(() => {
+                if (scatterChartRef.current) {
+                    const ctx = scatterChartRef.current.getContext('2d');
+
+                    if (scatterChart.current) {
+                        scatterChart.current.destroy();
+                    }
+
+                    const datasets = Object.keys(deptColorMap).map(dept => ({
+                        label: dept,
+                        data: scatterData.filter(d => d.dept === dept),
+                        backgroundColor: deptColorMap[dept],
+                        pointRadius: 8
+                    }));
+
+                    scatterChart.current = new Chart(ctx, {
+                        type: 'scatter',
+                        data: { datasets },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            scales: {
+                                x: {
+                                    title: { display: true, text: '意欲 →' },
+                                    min: 0,
+                                    max: 5.5
+                                },
+                                y: {
+                                    title: { display: true, text: '← スキル' },
+                                    min: 0,
+                                    max: 5.5
+                                }
+                            },
+                            plugins: {
+                                legend: { display: true, position: 'bottom' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const point = context.raw;
+                                            return `${point.name} (意欲:${point.x}, スキル:${point.y})`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                return () => {
+                    if (scatterChart.current) {
+                        scatterChart.current.destroy();
+                    }
+                };
+            }, [data]);
+
+            // Bar Chart
+            useEffect(() => {
+                if (barChartRef.current) {
+                    const ctx = barChartRef.current.getContext('2d');
+
+                    if (barChart.current) {
+                        barChart.current.destroy();
+                    }
+
+                    barChart.current = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: deptChartData.map(d => d.name),
+                            datasets: [
+                                {
+                                    label: '意欲',
+                                    data: deptChartData.map(d => d.意欲),
+                                    backgroundColor: '#5cb85c'
+                                },
+                                {
+                                    label: 'スキル',
+                                    data: deptChartData.map(d => d.スキル),
+                                    backgroundColor: '#5bc0de'
+                                },
+                                {
+                                    label: 'リスク',
+                                    data: deptChartData.map(d => d.リスク),
+                                    backgroundColor: '#f0ad4e'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            scales: {
+                                y: { min: 0, max: 5 }
+                            },
+                            plugins: {
+                                legend: { display: true, position: 'bottom' }
+                            }
+                        }
+                    });
+                }
+
+                return () => {
+                    if (barChart.current) {
+                        barChart.current.destroy();
+                    }
+                };
+            }, [analysis]);
 
             return (
                 <div className="min-h-screen bg-gray-50">
@@ -861,17 +1008,8 @@
                                     </div>
                                     <p className="text-gray-700">{typeNarrative}</p>
                                 </div>
-                                <div>
-                                    <ResponsiveContainer width="100%" height={280}>
-                                        <RadarChart data={radarData} outerRadius={90}>
-                                            <PolarGrid />
-                                            <PolarAngleAxis dataKey="axis" />
-                                            <PolarRadiusAxis angle={30} domain={[0, 5]} />
-                                            <Radar name="御社" dataKey="自社" stroke="#5cb85c" fill="#5cb85c" fillOpacity={0.4} />
-                                            <Radar name="業界平均" dataKey="業界平均" stroke="#94a3b8" fill="#cbd5f5" fillOpacity={0.3} />
-                                            <Legend />
-                                        </RadarChart>
-                                    </ResponsiveContainer>
+                                <div style={{height: '280px'}}>
+                                    <canvas ref={radarChartRef}></canvas>
                                 </div>
                             </div>
                         </section>
@@ -943,23 +1081,8 @@
                                         color="bg-gray-50"
                                     />
                                 </div>
-                                <div>
-                                    <ResponsiveContainer width="100%" height={380}>
-                                        <ScatterChart>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis type="number" dataKey="x" name="意欲" domain={[0, 5.5]} label={{ value: '意欲 →', position: 'insideBottom', offset: -5 }} />
-                                            <YAxis type="number" dataKey="y" name="スキル" domain={[0, 5.5]} label={{ value: '← スキル', angle: -90, position: 'insideLeft' }} />
-                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
-                                            {Object.keys(deptColorMap).map(dept => (
-                                                <Scatter
-                                                    key={dept}
-                                                    name={dept}
-                                                    data={scatterData.filter(item => item.dept === dept)}
-                                                    fill={deptColorMap[dept]}
-                                                />
-                                            ))}
-                                        </ScatterChart>
-                                    </ResponsiveContainer>
+                                <div style={{height: '380px'}}>
+                                    <canvas ref={scatterChartRef}></canvas>
                                 </div>
                             </div>
 
@@ -987,18 +1110,9 @@
                         <section className="bg-white rounded-lg shadow-lg p-8">
                             <h2 className="text-2xl font-bold mb-4">【部署別】詳細レポート</h2>
                             {deptChartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={360}>
-                                    <BarChart data={deptChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                                        <YAxis domain={[0, 5]} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="意欲" fill="#5cb85c" />
-                                        <Bar dataKey="スキル" fill="#5bc0de" />
-                                        <Bar dataKey="リスク" fill="#f0ad4e" />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                                <div style={{height: '360px'}}>
+                                    <canvas ref={barChartRef}></canvas>
+                                </div>
                             ) : (
                                 <p className="text-gray-600">部署データが不足しています。</p>
                             )}
@@ -1082,20 +1196,6 @@
                     <p className="text-xs text-gray-600 mt-2">{detail}</p>
                 </div>
             );
-        }
-
-        function CustomTooltip({ active, payload }) {
-            if (active && payload && payload.length) {
-                return (
-                    <div className="bg-white p-3 border border-gray-300 rounded shadow-lg text-sm">
-                        <p className="font-bold">{payload[0].payload.name}</p>
-                        <p>部署: {payload[0].payload.dept}</p>
-                        <p>意欲: {payload[0].payload.x}</p>
-                        <p>スキル: {payload[0].payload.y}</p>
-                    </div>
-                );
-            }
-            return null;
         }
 
         ReactDOM.render(<App />, document.getElementById('root'));
