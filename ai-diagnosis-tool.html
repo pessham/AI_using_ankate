@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI活用診断レポート - 企業のAI活用状況を可視化</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/recharts@2.5.0/dist/Recharts.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; }
+        .accent-color { color: #5cb85c; }
+        .accent-bg { background-color: #5cb85c; }
+        .accent-border { border-color: #5cb85c; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { BarChart, Bar, ScatterChart, Scatter, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+
+        // 設定: Googleスプレッドシートの公開URL
+        const DEFAULT_SHEET_ID = '1OpnyOeVKKEhHmRP5If9C9XFCe6629dgIcgD-u0W-ekk';
+
+        // ユーティリティ関数: GoogleスプレッドシートからCSVデータを取得
+        const fetchSheetData = async (sheetId) => {
+            try {
+                const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+                const response = await fetch(url);
+                const csvText = await response.text();
+                return parseCSV(csvText);
+            } catch (error) {
+                console.error('データ取得エラー:', error);
+                throw new Error('スプレッドシートからデータを取得できませんでした');
+            }
+        };
+
+        // CSV解析
+        const parseCSV = (csv) => {
+            const lines = csv.split('\n').filter(line => line.trim());
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            
+            return lines.slice(1).map(line => {
+                const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = values[index] || '';
+                });
+                return obj;
+            }).filter(row => row['社員ID']); // 空行を除外
+        };
+
+        // データ分析関数
+        const analyzeData = (data) => {
+            if (!data || data.length === 0) return null;
+
+            // 4象限分類
+            const quadrants = {
+                leader: [], // 高スキル × 高意欲
+                challenger: [], // 低スキル × 高意欲
+                cautious: [], // 高スキル × 低意欲
+                inactive: [] // 低スキル × 低意欲
+            };
+
+            data.forEach(row => {
+                const xScore = parseFloat(row['X軸スコア (意欲)']) || 0;
+                const yScore = parseFloat(row['Y軸スコア (スキル)']) || 0;
+                
+                if (xScore >= 3.5 && yScore >= 3.5) quadrants.leader.push(row);
+                else if (xScore >= 3.5 && yScore < 3.5) quadrants.challenger.push(row);
+                else if (xScore < 3.5 && yScore >= 3.5) quadrants.cautious.push(row);
+                else quadrants.inactive.push(row);
+            });
+
+            // リスク分析
+            const riskAnalysis = {
+                confidentialInput: data.filter(r => r['Q5.機密情報入力'] === 'はい').length,
+                copyrightLow: data.filter(r => 
+                    r['Q6.著作権理解'] === '全く理解していない' || 
+                    r['Q6.著作権理解'] === 'あまり理解していない' ||
+                    r['Q6.著作権理解'] === 'わからない'
+                ).length,
+                total: data.length
+            };
+
+            // 部署別集計
+            const departments = {};
+            data.forEach(row => {
+                const dept = row['部署'];
+                if (!departments[dept]) {
+                    departments[dept] = {
+                        name: dept,
+                        count: 0,
+                        avgSkill: 0,
+                        avgMotivation: 0,
+                        highRisk: 0
+                    };
+                }
+                departments[dept].count++;
+                departments[dept].avgSkill += parseFloat(row['Y軸スコア (スキル)']) || 0;
+                departments[dept].avgMotivation += parseFloat(row['X軸スコア (意欲)']) || 0;
+                if (row['Q5.機密情報入力'] === 'はい') departments[dept].highRisk++;
+            });
+
+            Object.keys(departments).forEach(dept => {
+                departments[dept].avgSkill = (departments[dept].avgSkill / departments[dept].count).toFixed(1);
+                departments[dept].avgMotivation = (departments[dept].avgMotivation / departments[dept].count).toFixed(1);
+            });
+
+            return {
+                quadrants,
+                riskAnalysis,
+                departments: Object.values(departments),
+                totalEmployees: data.length
+            };
+        };
+
+        // メインアプリケーション
+        function App() {
+            const [sheetId, setSheetId] = useState(DEFAULT_SHEET_ID);
+            const [inputSheetId, setInputSheetId] = useState('');
+            const [data, setData] = useState(null);
+            const [analysis, setAnalysis] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [showResults, setShowResults] = useState(false);
+
+            // 初期ロード
+            useEffect(() => {
+                loadData(DEFAULT_SHEET_ID);
+            }, []);
+
+            const loadData = async (id) => {
+                setLoading(true);
+                setError(null);
+                try {
+                    const sheetData = await fetchSheetData(id);
+                    setData(sheetData);
+                    const analysisResult = analyzeData(sheetData);
+                    setAnalysis(analysisResult);
+                    setShowResults(true);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                const idToUse = inputSheetId || DEFAULT_SHEET_ID;
+                setSheetId(idToUse);
+                loadData(idToUse);
+            };
+
+            const extractSheetId = (url) => {
+                const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                return match ? match[1] : url;
+            };
+
+            if (!showResults) {
+                return <LandingPage onSubmit={handleSubmit} loading={loading} error={error} setInputSheetId={setInputSheetId} extractSheetId={extractSheetId} />;
+            }
+
+            return <DiagnosisResults analysis={analysis} data={data} />;
+        }
+
+        // ランディングページ
+        function LandingPage({ onSubmit, loading, error, setInputSheetId, extractSheetId }) {
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-white to-gray-100">
+                    {/* ヘッダー */}
+                    <header className="bg-white shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex items-center justify-between">
+                                <h1 className="text-2xl font-bold accent-color">AI活用診断レポート</h1>
+                                <div className="text-sm text-gray-600">powered by AIQ株式会社</div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* メインコンテンツ */}
+                    <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+                        <div className="text-center mb-12">
+                            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+                                御社のAI活用レベルを<br />
+                                <span className="accent-color">たった1分で可視化</span>
+                            </h2>
+                            <p className="text-xl text-gray-600">
+                                アンケート結果から自動で診断レポートを生成します
+                            </p>
+                        </div>
+
+                        {/* 入力フォーム */}
+                        <div className="bg-white rounded-lg shadow-lg p-8 mb-12">
+                            <form onSubmit={onSubmit}>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    GoogleスプレッドシートのURLまたはID
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                    onChange={(e) => setInputSheetId(extractSheetId(e.target.value))}
+                                />
+                                <p className="text-sm text-gray-500 mt-2">
+                                    ※ スプレッドシートを「リンクを知っている全員が閲覧可能」に設定してください<br />
+                                    ※ 空欄の場合はサンプルデータで診断します
+                                </p>
+                                
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full mt-6 accent-bg text-white font-bold py-4 px-6 rounded-lg hover:bg-green-600 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {loading ? '読み込み中...' : '診断を開始する 🔍'}
+                                </button>
+
+                                {error && (
+                                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                                        {error}
+                                    </div>
+                                )}
+                            </form>
+                        </div>
+
+                        {/* 特徴 */}
+                        <div className="grid md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-lg shadow">
+                                <div className="text-3xl mb-3">✓</div>
+                                <h3 className="font-bold text-lg mb-2">100社以上が活用</h3>
+                                <p className="text-gray-600 text-sm">企業のAI活用推進を支援</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg shadow">
+                                <div className="text-3xl mb-3">💰</div>
+                                <h3 className="font-bold text-lg mb-2">助成金対応研修</h3>
+                                <p className="text-gray-600 text-sm">費用の75%が補助されます</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg shadow">
+                                <div className="text-3xl mb-3">📊</div>
+                                <h3 className="font-bold text-lg mb-2">即座に可視化</h3>
+                                <p className="text-gray-600 text-sm">リアルタイムで分析レポート生成</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        // 診断結果ページ
+        function DiagnosisResults({ analysis, data }) {
+            if (!analysis) return null;
+
+            const quadrantPercentages = {
+                leader: ((analysis.quadrants.leader.length / analysis.totalEmployees) * 100).toFixed(0),
+                challenger: ((analysis.quadrants.challenger.length / analysis.totalEmployees) * 100).toFixed(0),
+                cautious: ((analysis.quadrants.cautious.length / analysis.totalEmployees) * 100).toFixed(0),
+                inactive: ((analysis.quadrants.inactive.length / analysis.totalEmployees) * 100).toFixed(0)
+            };
+
+            const riskPercentages = {
+                confidential: ((analysis.riskAnalysis.confidentialInput / analysis.riskAnalysis.total) * 100).toFixed(0),
+                copyright: ((analysis.riskAnalysis.copyrightLow / analysis.riskAnalysis.total) * 100).toFixed(0)
+            };
+
+            // AI活用レベル判定
+            const leaderRate = parseFloat(quadrantPercentages.leader);
+            const riskRate = Math.max(parseFloat(riskPercentages.confidential), parseFloat(riskPercentages.copyright));
+            
+            let aiLevel = '関心先行型';
+            let aiLevelStars = 3;
+            let aiLevelDescription = 'AI活用への関心は高いものの、スキルとリスク管理が追いついていない状態です';
+
+            if (leaderRate >= 30 && riskRate < 20) {
+                aiLevel = '成熟期';
+                aiLevelStars = 5;
+                aiLevelDescription = '全社的にAI活用が進み、リスク管理も適切に行われています';
+            } else if (leaderRate >= 20 && riskRate < 30) {
+                aiLevel = '成長期';
+                aiLevelStars = 4;
+                aiLevelDescription = 'AI活用が広がりつつあり、更なる推進が期待できる段階です';
+            } else if (leaderRate < 10 && riskRate > 40) {
+                aiLevel = '要注意期';
+                aiLevelStars = 2;
+                aiLevelDescription = 'リスク管理の体制整備が急務です';
+            } else if (leaderRate < 5) {
+                aiLevel = '黎明期';
+                aiLevelStars = 1;
+                aiLevelDescription = 'AI活用がほとんど進んでいない状態です';
+            }
+
+            // 散布図用データ
+            const scatterData = data.map(row => ({
+                x: parseFloat(row['X軸スコア (意欲)']) || 0,
+                y: parseFloat(row['Y軸スコア (スキル)']) || 0,
+                dept: row['部署'],
+                name: row['社員ID']
+            }));
+
+            // 部署別データ
+            const deptData = analysis.departments.map(d => ({
+                name: d.name,
+                スキル: parseFloat(d.avgSkill),
+                意欲: parseFloat(d.avgMotivation),
+                リスク率: ((d.highRisk / d.count) * 100).toFixed(0)
+            }));
+
+            const COLORS = {
+                営業部: '#5cb85c',
+                開発部: '#5bc0de',
+                'マーケ部': '#f0ad4e',
+                管理部: '#d9534f'
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* ヘッダー */}
+                    <header className="bg-white shadow-sm sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex items-center justify-between">
+                                <h1 className="text-xl font-bold accent-color">AI活用診断レポート</h1>
+                                <button 
+                                    onClick={() => window.location.reload()} 
+                                    className="text-sm text-gray-600 hover:text-gray-900"
+                                >
+                                    ← 新しい診断
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {/* サマリー */}
+                        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+                            <h2 className="text-2xl font-bold mb-4">🎯 診断結果サマリー</h2>
+                            <div className="flex items-center gap-4 mb-4">
+                                <div>
+                                    <div className="text-sm text-gray-600">御社のAI活用レベル</div>
+                                    <div className="text-3xl font-bold accent-color">
+                                        {'★'.repeat(aiLevelStars)}{'☆'.repeat(5-aiLevelStars)} {aiLevel}
+                                    </div>
+                                </div>
+                            </div>
+                            <p className="text-gray-700 mb-6">{aiLevelDescription}</p>
+                            
+                            {(parseFloat(riskPercentages.confidential) > 30 || parseFloat(riskPercentages.copyright) > 40) && (
+                                <div className="bg-red-50 border-l-4 border-red-500 p-4">
+                                    <div className="flex items-start">
+                                        <div className="text-2xl mr-3">⚠️</div>
+                                        <div>
+                                            <h3 className="font-bold text-red-800 mb-1">緊急課題</h3>
+                                            <p className="text-red-700">
+                                                リスク認知度が低く、情報漏洩の可能性があります
+                                                （機密情報入力: {riskPercentages.confidential}%、著作権理解不足: {riskPercentages.copyright}%）
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 4象限マトリクス */}
+                        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+                            <h2 className="text-2xl font-bold mb-4">📊 4象限マトリクス（社員分類）</h2>
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div>
+                                    <ResponsiveContainer width="100%" height={400}>
+                                        <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis type="number" dataKey="x" name="意欲" domain={[0, 5.5]} label={{ value: '意欲 →', position: 'insideBottom', offset: -10 }} />
+                                            <YAxis type="number" dataKey="y" name="スキル" domain={[0, 5.5]} label={{ value: '← スキル', angle: -90, position: 'insideLeft' }} />
+                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
+                                            {Object.keys(COLORS).map(dept => (
+                                                <Scatter
+                                                    key={dept}
+                                                    name={dept}
+                                                    data={scatterData.filter(d => d.dept === dept)}
+                                                    fill={COLORS[dept]}
+                                                />
+                                            ))}
+                                            {/* 中央線 */}
+                                            <line x1="0" y1="175" x2="350" y2="175" stroke="#ccc" strokeWidth="2" strokeDasharray="5 5" />
+                                            <line x1="175" y1="0" x2="175" y2="350" stroke="#ccc" strokeWidth="2" strokeDasharray="5 5" />
+                                        </ScatterChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="space-y-4">
+                                    <QuadrantCard 
+                                        emoji="🌟" 
+                                        title="AIリーダー" 
+                                        percentage={quadrantPercentages.leader}
+                                        count={analysis.quadrants.leader.length}
+                                        description="高スキル × 高意欲。社内のAI推進役として活躍"
+                                        color="bg-green-50 border-green-200"
+                                    />
+                                    <QuadrantCard 
+                                        emoji="🚀" 
+                                        title="AI挑戦者" 
+                                        percentage={quadrantPercentages.challenger}
+                                        count={analysis.quadrants.challenger.length}
+                                        description="低スキル × 高意欲。教育すべき優先層"
+                                        color="bg-blue-50 border-blue-200"
+                                    />
+                                    <QuadrantCard 
+                                        emoji="😴" 
+                                        title="AI慎重派" 
+                                        percentage={quadrantPercentages.cautious}
+                                        count={analysis.quadrants.cautious.length}
+                                        description="高スキル × 低意欲。活用促進が必要"
+                                        color="bg-yellow-50 border-yellow-200"
+                                    />
+                                    <QuadrantCard 
+                                        emoji="⚠️" 
+                                        title="AI未着手" 
+                                        percentage={quadrantPercentages.inactive}
+                                        count={analysis.quadrants.inactive.length}
+                                        description="低スキル × 低意欲。最優先で教育すべき層"
+                                        color="bg-red-50 border-red-200"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* リスク分析 */}
+                        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+                            <h2 className="text-2xl font-bold mb-4">⚠️ リスク分析</h2>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <RiskCard
+                                    title="機密情報を入力"
+                                    percentage={riskPercentages.confidential}
+                                    count={analysis.riskAnalysis.confidentialInput}
+                                    total={analysis.riskAnalysis.total}
+                                    level={parseFloat(riskPercentages.confidential)}
+                                />
+                                <RiskCard
+                                    title="著作権理解度が低い"
+                                    percentage={riskPercentages.copyright}
+                                    count={analysis.riskAnalysis.copyrightLow}
+                                    total={analysis.riskAnalysis.total}
+                                    level={parseFloat(riskPercentages.copyright)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* 部署別比較 */}
+                        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+                            <h2 className="text-2xl font-bold mb-4">📈 部署別比較</h2>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={deptData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis domain={[0, 5]} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Bar dataKey="スキル" fill="#5cb85c" />
+                                    <Bar dataKey="意欲" fill="#5bc0de" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* 提案セクション */}
+                        <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg shadow-lg p-8 mb-8">
+                            <h2 className="text-2xl font-bold mb-4">💡 御社への提案</h2>
+                            <div className="space-y-4 mb-6">
+                                {parseFloat(quadrantPercentages.challenger) + parseFloat(quadrantPercentages.inactive) > 50 && (
+                                    <div className="flex items-start">
+                                        <div className="text-2xl mr-3">1️⃣</div>
+                                        <div>
+                                            <h3 className="font-bold mb-1">AI潜在層（{(parseFloat(quadrantPercentages.challenger) + parseFloat(quadrantPercentages.inactive)).toFixed(0)}%）への基礎研修</h3>
+                                            <p className="text-gray-700">スキル不足の社員が過半数。基礎から学べる研修が必要です</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {(parseFloat(riskPercentages.confidential) > 20 || parseFloat(riskPercentages.copyright) > 30) && (
+                                    <div className="flex items-start">
+                                        <div className="text-2xl mr-3">2️⃣</div>
+                                        <div>
+                                            <h3 className="font-bold mb-1">リスク管理ガイドラインの策定</h3>
+                                            <p className="text-gray-700">情報漏洩リスクが高い状態。ガイドライン整備が急務です</p>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex items-start">
+                                    <div className="text-2xl mr-3">3️⃣</div>
+                                    <div>
+                                        <h3 className="font-bold mb-1">部門別AI活用ワークショップ</h3>
+                                        <p className="text-gray-700">部署ごとに活用状況が異なります。業務に即した実践研修が効果的です</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-white rounded-lg p-6 border-2 accent-border">
+                                <p className="text-center text-lg font-bold mb-4">
+                                    👉 これらの課題を解決する研修が<br />
+                                    <span className="accent-color text-2xl">助成金（費用の75%補助）</span>で受けられます!
+                                </p>
+                                <div className="text-center">
+                                    <a 
+                                        href="https://calendly.com" 
+                                        target="_blank"
+                                        className="inline-block accent-bg text-white font-bold py-4 px-8 rounded-lg hover:bg-green-600 transition duration-200 text-lg"
+                                    >
+                                        30分無料相談を予約する 🎯
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* フッター */}
+                        <div className="text-center text-gray-600 text-sm">
+                            <p>© 2024 AI活用診断レポート. All rights reserved.</p>
+                            <p className="mt-2">お問い合わせ: info@example.com</p>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        // コンポーネント: 象限カード
+        function QuadrantCard({ emoji, title, percentage, count, description, color }) {
+            return (
+                <div className={`${color} border rounded-lg p-4`}>
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-2xl">{emoji}</span>
+                            <span className="font-bold text-lg">{title}</span>
+                        </div>
+                        <span className="text-2xl font-bold">{percentage}%</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">{description}</p>
+                    <p className="text-xs text-gray-500">{count}名</p>
+                </div>
+            );
+        }
+
+        // コンポーネント: リスクカード
+        function RiskCard({ title, percentage, count, total, level }) {
+            const getColor = (level) => {
+                if (level >= 40) return { bg: 'bg-red-100', text: 'text-red-700', icon: '🔴' };
+                if (level >= 20) return { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: '🟡' };
+                return { bg: 'bg-green-100', text: 'text-green-700', icon: '🟢' };
+            };
+
+            const color = getColor(level);
+
+            return (
+                <div className={`${color.bg} rounded-lg p-6`}>
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold text-lg">{title}</h3>
+                        <span className="text-2xl">{color.icon}</span>
+                    </div>
+                    <div className={`text-4xl font-bold ${color.text} mb-2`}>{percentage}%</div>
+                    <p className="text-sm text-gray-600">{count}名 / {total}名</p>
+                </div>
+            );
+        }
+
+        // カスタムツールチップ
+        function CustomTooltip({ active, payload }) {
+            if (active && payload && payload.length) {
+                return (
+                    <div className="bg-white p-3 border border-gray-300 rounded shadow-lg">
+                        <p className="font-bold">{payload[0].payload.name}</p>
+                        <p className="text-sm">部署: {payload[0].payload.dept}</p>
+                        <p className="text-sm">意欲: {payload[0].payload.x}</p>
+                        <p className="text-sm">スキル: {payload[0].payload.y}</p>
+                    </div>
+                );
+            }
+            return null;
+        }
+
+        // アプリケーション起動
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
