@@ -616,10 +616,6 @@
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
 
-            useEffect(() => {
-                loadData(DEFAULT_SHEET_ID);
-            }, []);
-
             const loadData = async (id, options = {}) => {
                 const { useSample = false } = options;
                 const hadAnalysis = Boolean(analysis);
