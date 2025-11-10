@@ -879,6 +879,39 @@
                         pointRadius: 8
                     }));
 
+                    const quadrantBackgroundPlugin = {
+                        id: 'quadrantBackground',
+                        beforeDraw: (chart) => {
+                            const ctx = chart.ctx;
+                            const chartArea = chart.chartArea;
+                            const xScale = chart.scales.x;
+                            const yScale = chart.scales.y;
+
+                            const midX = xScale.getPixelForValue(3.5);
+                            const midY = yScale.getPixelForValue(3.5);
+
+                            ctx.save();
+
+                            // 統率者 (右上): 高意欲×高スキル
+                            ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+                            ctx.fillRect(midX, chartArea.top, chartArea.right - midX, midY - chartArea.top);
+
+                            // 挑戦者 (右下): 高意欲×低スキル
+                            ctx.fillStyle = 'rgba(251, 191, 36, 0.1)';
+                            ctx.fillRect(midX, midY, chartArea.right - midX, chartArea.bottom - midY);
+
+                            // 慎重派 (左上): 低意欲×高スキル
+                            ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+                            ctx.fillRect(chartArea.left, chartArea.top, midX - chartArea.left, midY - chartArea.top);
+
+                            // 未着手 (左下): 低意欲×低スキル
+                            ctx.fillStyle = 'rgba(156, 163, 175, 0.1)';
+                            ctx.fillRect(chartArea.left, midY, midX - chartArea.left, chartArea.bottom - midY);
+
+                            ctx.restore();
+                        }
+                    };
+
                     scatterChart.current = new Chart(ctx, {
                         type: 'scatter',
                         data: { datasets },
@@ -908,7 +941,8 @@
                                     }
                                 }
                             }
-                        }
+                        },
+                        plugins: [quadrantBackgroundPlugin]
                     });
                 }
 
@@ -997,9 +1031,9 @@
                                     <p className="text-gray-700 mb-4">{aiLevel.description}</p>
                                     <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-4">
                                         <p className="text-sm text-gray-700">
-                                            意欲 {averages.motivation}pt（業界 {INDUSTRY_BENCHMARK.motivation}pt） /
-                                            スキル {averages.skill}pt（業界 {INDUSTRY_BENCHMARK.skill}pt） /
-                                            リスク {averages.risk}pt（業界 {INDUSTRY_BENCHMARK.risk}pt）
+                                            意欲 {averages.motivation}pt（業界平均 {INDUSTRY_BENCHMARK.motivation}pt） /
+                                            スキル {averages.skill}pt（業界平均 {INDUSTRY_BENCHMARK.skill}pt） /
+                                            リスク {averages.risk}pt（業界平均 {INDUSTRY_BENCHMARK.risk}pt）
                                         </p>
                                     </div>
                                     <p className="text-gray-700">{typeNarrative}</p>
@@ -1012,10 +1046,16 @@
 
                         <section className="bg-white rounded-lg shadow-lg p-8">
                             <h2 className="text-2xl font-bold mb-4">【最重要課題】緊急のリスク状況</h2>
-                            <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-bold mb-4 ${riskStatus.label === '危険' ? 'bg-red-100 text-red-700' : riskStatus.label === '警告' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'}`}>
-                                Z軸リスク判定：{riskStatus.label}
+                            <div className="mb-4">
+                                <p className="text-lg font-bold mb-2">
+                                    診断結果: リスクスコア：
+                                    <span className={`${riskStatus.label === '危険' ? 'text-red-700' : riskStatus.label === '警告' ? 'text-yellow-700' : 'text-green-700'}`}>
+                                        【{riskStatus.label}】
+                                    </span>
+                                    {' '}(3段階中レベル{riskStatus.label === '危険' ? '3' : riskStatus.label === '警告' ? '2' : '1'})
+                                </p>
                             </div>
-                            <p className="text-gray-700 mb-6">{riskStatus.description}</p>
+                            <p className="text-gray-700 mb-4 font-semibold">具体的な危険:</p>
 
                             <div className="grid md:grid-cols-4 gap-4 mb-6">
                                 <RiskCard title="社外秘入力を容認" percentage={`${riskStatus.secretRate}%`} detail={`${riskCounts.secretInput}名 / ${totalEmployees}名`} level={riskStatus.secretRate} />
@@ -1046,7 +1086,7 @@
                                 <div className="space-y-4">
                                     <QuadrantCard
                                         emoji="🚀"
-                                        title="AIリーダー"
+                                        title="統率者"
                                         percentage={typePercentages.leader}
                                         count={quadrants.leader.length}
                                         description="高意欲×高スキル。全社展開の旗振り役。"
@@ -1054,7 +1094,7 @@
                                     />
                                     <QuadrantCard
                                         emoji="🔥"
-                                        title="AI挑戦者"
+                                        title="挑戦者"
                                         percentage={typePercentages.challenger}
                                         count={quadrants.challenger.length}
                                         description="やる気はあるがスキル不足。研修で一気に開花。"
@@ -1062,7 +1102,7 @@
                                     />
                                     <QuadrantCard
                                         emoji="🛡️"
-                                        title="AI慎重派"
+                                        title="慎重派"
                                         percentage={typePercentages.cautious}
                                         count={quadrants.cautious.length}
                                         description="スキルはあるが着火しきれていない層。成功事例の共有が鍵。"
@@ -1070,7 +1110,7 @@
                                     />
                                     <QuadrantCard
                                         emoji="🌱"
-                                        title="AI未着手"
+                                        title="未着手"
                                         percentage={typePercentages.inactive}
                                         count={quadrants.inactive.length}
                                         description="まずは価値を体感できるワークショップから。"
