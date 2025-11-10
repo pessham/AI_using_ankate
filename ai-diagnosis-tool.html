@@ -908,6 +908,45 @@
                             ctx.fillStyle = 'rgba(156, 163, 175, 0.1)';
                             ctx.fillRect(chartArea.left, midY, midX - chartArea.left, chartArea.bottom - midY);
 
+                            // 四象限のラベルを追加
+                            ctx.font = 'bold 14px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+
+                            // 統率者ラベル (右上)
+                            ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
+                            ctx.fillText('🚀 統率者', (midX + chartArea.right) / 2, chartArea.top + 20);
+
+                            // 挑戦者ラベル (右下)
+                            ctx.fillStyle = 'rgba(251, 191, 36, 0.9)';
+                            ctx.fillText('🔥 挑戦者', (midX + chartArea.right) / 2, chartArea.bottom - 20);
+
+                            // 慎重派ラベル (左上)
+                            ctx.fillStyle = 'rgba(59, 130, 246, 0.7)';
+                            ctx.fillText('🛡️ 慎重派', (chartArea.left + midX) / 2, chartArea.top + 20);
+
+                            // 未着手ラベル (左下)
+                            ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
+                            ctx.fillText('🌱 未着手', (chartArea.left + midX) / 2, chartArea.bottom - 20);
+
+                            // 基準線を描画
+                            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                            ctx.lineWidth = 2;
+                            ctx.setLineDash([5, 5]);
+
+                            // 垂直線
+                            ctx.beginPath();
+                            ctx.moveTo(midX, chartArea.top);
+                            ctx.lineTo(midX, chartArea.bottom);
+                            ctx.stroke();
+
+                            // 水平線
+                            ctx.beginPath();
+                            ctx.moveTo(chartArea.left, midY);
+                            ctx.lineTo(chartArea.right, midY);
+                            ctx.stroke();
+
+                            ctx.setLineDash([]);
                             ctx.restore();
                         }
                     };
@@ -1055,7 +1094,30 @@
                     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
                         {/* エグゼクティブサマリー */}
                         <section className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg shadow-lg p-8 border-2 border-green-200">
-                            <h2 className="text-3xl font-bold mb-6 text-center accent-color">診断結果サマリー</h2>
+                            <div className="text-center mb-6">
+                                <h2 className="text-3xl font-bold accent-color mb-2">診断結果サマリー</h2>
+                                <div className="flex items-center justify-center gap-8 mt-4">
+                                    <div className="text-center">
+                                        <p className="text-sm text-gray-600 mb-1">AI活用レベル</p>
+                                        <div className="text-4xl font-bold accent-color">{`★`.repeat(aiLevel.level)}{`☆`.repeat(5 - aiLevel.level)}</div>
+                                        <p className="text-lg font-bold text-gray-800 mt-1">{aiLevel.title}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-sm text-gray-600 mb-1">リスク状況</p>
+                                        <div className={`text-4xl font-bold ${riskStatus.label === '危険' ? 'text-red-600' : riskStatus.label === '警告' ? 'text-yellow-600' : 'text-green-600'}`}>
+                                            {riskStatus.label === '危険' ? '⚠️' : riskStatus.label === '警告' ? '⚡' : '✅'}
+                                        </div>
+                                        <p className={`text-lg font-bold mt-1 ${riskStatus.label === '危険' ? 'text-red-700' : riskStatus.label === '警告' ? 'text-yellow-700' : 'text-green-700'}`}>
+                                            {riskStatus.label}
+                                        </p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-sm text-gray-600 mb-1">対象人数</p>
+                                        <div className="text-4xl font-bold text-gray-800">{totalEmployees}</div>
+                                        <p className="text-lg font-bold text-gray-600 mt-1">名</p>
+                                    </div>
+                                </div>
+                            </div>
                             <div className="grid md:grid-cols-2 gap-6">
                                 {/* 御社の強み */}
                                 <div className="bg-white rounded-lg p-6 shadow">
@@ -1105,43 +1167,43 @@
                                 {/* 改善ポイント */}
                                 <div className="bg-white rounded-lg p-6 shadow">
                                     <h3 className="text-xl font-bold mb-4 text-red-700 flex items-center">
-                                        <span className="text-2xl mr-2">⚠️</span> 改善ポイント
+                                        <span className="text-2xl mr-2">⚠️</span> 改善ポイント（優先度順）
                                     </h3>
-                                    <ul className="space-y-2 text-gray-700">
+                                    <ul className="space-y-3 text-gray-700">
                                         {riskStatus.label !== '良好' && (
-                                            <li className="flex items-start">
-                                                <span className="mr-2 text-red-600">▶</span>
+                                            <li className="flex items-start bg-red-50 p-3 rounded-lg border-l-4 border-red-500">
+                                                <span className="inline-block bg-red-600 text-white text-xs font-bold px-2 py-1 rounded mr-2 mt-0.5">最優先</span>
                                                 <span><strong className="text-red-600">リスク管理が【{riskStatus.label}】レベル</strong>。情報漏洩やコンプライアンス違反のリスクがあります</span>
                                             </li>
                                         )}
                                         {riskStatus.secretRate > 30 && (
-                                            <li className="flex items-start">
-                                                <span className="mr-2 text-red-600">▶</span>
-                                                <span><strong>{riskStatus.secretRate}%が機密情報入力を容認</strong>しており、情報漏洩リスクが高い状態です</span>
+                                            <li className="flex items-start bg-red-50 p-3 rounded-lg border-l-4 border-red-400">
+                                                <span className="inline-block bg-red-500 text-white text-xs font-bold px-2 py-1 rounded mr-2 mt-0.5">緊急</span>
+                                                <span><strong className="text-red-700">社員の{riskStatus.secretRate}%が機密情報入力を容認</strong>。即座に対策が必要です</span>
                                             </li>
                                         )}
                                         {riskStatus.guidelineRate > 40 && (
-                                            <li className="flex items-start">
-                                                <span className="mr-2 text-red-600">▶</span>
-                                                <span><strong>{riskStatus.guidelineRate}%がガイドラインを知らない</strong>。まずは全社ルール整備が急務です</span>
+                                            <li className="flex items-start bg-orange-50 p-3 rounded-lg border-l-4 border-orange-400">
+                                                <span className="inline-block bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded mr-2 mt-0.5">重要</span>
+                                                <span><strong className="text-orange-700">{riskStatus.guidelineRate}%がガイドラインを知らない</strong>。全社ルール整備が急務です</span>
                                             </li>
                                         )}
                                         {typePercentages.inactive > 30 && (
-                                            <li className="flex items-start">
-                                                <span className="mr-2 text-orange-600">▶</span>
-                                                <span><strong>未着手層が{typePercentages.inactive}%</strong>と多く、AI活用の機会損失が発生しています</span>
+                                            <li className="flex items-start bg-yellow-50 p-3 rounded-lg border-l-4 border-yellow-400">
+                                                <span className="inline-block bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded mr-2 mt-0.5">改善</span>
+                                                <span><strong className="text-yellow-800">未着手層が{typePercentages.inactive}%</strong>と多く、AI活用の機会損失が発生中</span>
                                             </li>
                                         )}
                                         {averages.skill < INDUSTRY_BENCHMARK.skill && (
-                                            <li className="flex items-start">
-                                                <span className="mr-2 text-orange-600">▶</span>
-                                                <span><strong>スキルが業界平均以下</strong>。実践的な研修で底上げが必要です</span>
+                                            <li className="flex items-start bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
+                                                <span className="inline-block bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded mr-2 mt-0.5">育成</span>
+                                                <span><strong className="text-blue-700">スキルが業界平均以下</strong>。実践研修で底上げが必要です</span>
                                             </li>
                                         )}
                                         {riskiestDept && riskiestDept.highRiskRate > 50 && (
-                                            <li className="flex items-start">
-                                                <span className="mr-2 text-orange-600">▶</span>
-                                                <span><strong>{riskiestDept.name}のリスク意識が特に低い</strong>。重点的なフォローが必要です</span>
+                                            <li className="flex items-start bg-orange-50 p-3 rounded-lg border-l-4 border-orange-400">
+                                                <span className="inline-block bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded mr-2 mt-0.5">部署別</span>
+                                                <span><strong className="text-orange-700">{riskiestDept.name}のリスク意識が特に低い</strong>。重点フォロー対象です</span>
                                             </li>
                                         )}
                                     </ul>
@@ -1150,25 +1212,64 @@
 
                             {/* アクションプラン */}
                             <div className="mt-6 bg-white rounded-lg p-6 shadow border-l-4 border-green-500">
-                                <h3 className="text-lg font-bold mb-3 accent-color">📋 推奨アクションプラン</h3>
-                                <ol className="space-y-2 text-gray-700">
-                                    <li className="flex items-start">
-                                        <span className="font-bold mr-2">1.</span>
-                                        <span><strong>リスク対策（守り）：</strong>全社員向けAIセキュリティ研修でガイドライン徹底</span>
-                                    </li>
-                                    <li className="flex items-start">
-                                        <span className="font-bold mr-2">2.</span>
-                                        <span><strong>スキル向上（攻め）：</strong>挑戦者層への実践研修で統率者へ引き上げ</span>
-                                    </li>
-                                    <li className="flex items-start">
-                                        <span className="font-bold mr-2">3.</span>
-                                        <span><strong>横展開：</strong>統率者を社内講師として未着手層を巻き込み</span>
-                                    </li>
-                                </ol>
-                                <div className="mt-4 text-center">
-                                    <a href={FREE_CONSULTATION_URL} target="_blank" className="inline-flex items-center justify-center px-8 py-4 rounded-lg accent-bg text-white font-bold text-lg hover:opacity-90 shadow-lg">
-                                        無料で具体的な改善プランを相談する →
-                                    </a>
+                                <h3 className="text-xl font-bold mb-4 accent-color flex items-center">
+                                    <span className="text-2xl mr-2">📋</span> 御社専用・3ステップ改善プラン
+                                </h3>
+                                <div className="space-y-4">
+                                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                                        <div className="flex items-start">
+                                            <span className="inline-block bg-red-600 text-white font-bold px-3 py-1 rounded mr-3">STEP 1</span>
+                                            <div className="flex-1">
+                                                <h4 className="font-bold text-gray-900 mb-1">【最優先】リスク対策研修（守り）</h4>
+                                                <p className="text-sm text-gray-700 mb-2">全社員向けAIセキュリティ研修でガイドライン徹底。情報漏洩・コンプライアンス違反を防止</p>
+                                                <div className="flex items-center gap-4 text-xs">
+                                                    <span className="bg-white px-2 py-1 rounded border border-red-300">⏱ 実施期間: 1-2週間</span>
+                                                    <span className="bg-white px-2 py-1 rounded border border-red-300">💰 助成金対象</span>
+                                                    <span className="font-bold text-red-700">→ リスク90%削減</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                                        <div className="flex items-start">
+                                            <span className="inline-block bg-green-600 text-white font-bold px-3 py-1 rounded mr-3">STEP 2</span>
+                                            <div className="flex-1">
+                                                <h4 className="font-bold text-gray-900 mb-1">スキル向上研修（攻め）</h4>
+                                                <p className="text-sm text-gray-700 mb-2">挑戦者{typePercentages.challenger}%を統率者へ引き上げ。業務効率20-30%改善を実現</p>
+                                                <div className="flex items-center gap-4 text-xs">
+                                                    <span className="bg-white px-2 py-1 rounded border border-green-300">⏱ 実施期間: 1ヶ月</span>
+                                                    <span className="bg-white px-2 py-1 rounded border border-green-300">💰 助成金対象</span>
+                                                    <span className="font-bold text-green-700">→ 生産性30%向上</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                        <div className="flex items-start">
+                                            <span className="inline-block bg-blue-600 text-white font-bold px-3 py-1 rounded mr-3">STEP 3</span>
+                                            <div className="flex-1">
+                                                <h4 className="font-bold text-gray-900 mb-1">全社横展開（定着）</h4>
+                                                <p className="text-sm text-gray-700 mb-2">統率者{typePercentages.leader}%を社内講師に。未着手層{typePercentages.inactive}%を巻き込み全社AI化を実現</p>
+                                                <div className="flex items-center gap-4 text-xs">
+                                                    <span className="bg-white px-2 py-1 rounded border border-blue-300">⏱ 実施期間: 2-3ヶ月</span>
+                                                    <span className="bg-white px-2 py-1 rounded border border-blue-300">🔄 継続支援</span>
+                                                    <span className="font-bold text-blue-700">→ 全社AI活用率80%以上</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-6 bg-gradient-to-r from-green-100 to-green-50 p-4 rounded-lg border-2 border-green-300">
+                                    <p className="text-center text-sm text-gray-700 mb-3">
+                                        <strong className="text-lg accent-color">💡 助成金活用で研修費用の最大75%を削減可能</strong><br/>
+                                        まずは無料相談で御社専用のロードマップを作成します
+                                    </p>
+                                    <div className="text-center">
+                                        <a href={FREE_CONSULTATION_URL} target="_blank" className="inline-flex items-center justify-center px-10 py-4 rounded-lg accent-bg text-white font-bold text-xl hover:opacity-90 shadow-xl transform hover:scale-105 transition-all">
+                                            今すぐ30分無料相談を予約 →
+                                        </a>
+                                        <p className="text-xs text-gray-600 mt-2">※ 所要時間30分・オンライン対応・無理な営業は一切ありません</p>
+                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -1298,21 +1399,40 @@
                         <section className="bg-white rounded-lg shadow-lg p-8">
                             <h2 className="text-2xl font-bold mb-4">【部署別】詳細レポート</h2>
                             {deptChartData.length > 0 ? (
-                                <div style={{height: '360px'}}>
-                                    <canvas ref={barChartRef}></canvas>
-                                </div>
+                                <>
+                                    <div style={{height: '360px'}} className="mb-6">
+                                        <canvas ref={barChartRef}></canvas>
+                                    </div>
+                                    <div className="grid md:grid-cols-2 gap-4 mt-6">
+                                        {strongestDept && (
+                                            <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+                                                <h3 className="font-bold text-green-800 mb-2 flex items-center">
+                                                    <span className="text-xl mr-2">🏆</span> 最優秀部署
+                                                </h3>
+                                                <p className="text-sm text-gray-700">
+                                                    <strong className="text-lg text-green-700">{strongestDept.name}</strong><br/>
+                                                    スキル平均: <span className="font-bold text-green-600">{strongestDept.avgSkill.toFixed(1)}pt</span><br/>
+                                                    <span className="text-xs">→ 社内講師として他部署への横展開に最適</span>
+                                                </p>
+                                            </div>
+                                        )}
+                                        {riskiestDept && (
+                                            <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+                                                <h3 className="font-bold text-red-800 mb-2 flex items-center">
+                                                    <span className="text-xl mr-2">⚠️</span> 重点フォロー部署
+                                                </h3>
+                                                <p className="text-sm text-gray-700">
+                                                    <strong className="text-lg text-red-700">{riskiestDept.name}</strong><br/>
+                                                    高リスク率: <span className="font-bold text-red-600">{riskiestDept.highRiskRate.toFixed(0)}%</span><br/>
+                                                    <span className="text-xs">→ 優先的にリスク研修を実施すべき部署</span>
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
                             ) : (
                                 <p className="text-gray-600">部署データが不足しています。</p>
                             )}
-
-                            <div className="mt-6 space-y-3 text-sm text-gray-700">
-                                {strongestDept && (
-                                    <p>・【{strongestDept.name}】はスキル {strongestDept.avgSkill}pt と全社平均を上回っています。社内講師として横展開しましょう。</p>
-                                )}
-                                {riskiestDept && (
-                                    <p>・【{riskiestDept.name}】は高リスク回答比率 {riskiestDept.highRiskRate}% で要注意。優先的に守りの研修を実施してください。</p>
-                                )}
-                            </div>
 
                             <div className="grid md:grid-cols-2 gap-6 mt-8">
                                 <div>
